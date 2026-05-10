@@ -2,9 +2,11 @@ import path from 'node:path'
 import { Hono } from 'hono'
 import { createId } from '@paralleldrive/cuid2'
 import type { AppEnv } from '../../server.js'
+import { db } from '../../lib/db.js'
 import { env } from '../../lib/env.js'
 import { ApiError } from '../../lib/api-error.js'
 import { LocalStorageDriver, getStorage } from '../../lib/storage/driver.js'
+import { getAttachmentUrl } from '../../lib/storage/attachments.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 // MIME validation by magic bytes
@@ -145,4 +147,45 @@ attachmentsRoute.post('/upload', requireAuth, async (c) => {
       category,
     },
   })
+})
+
+// ─── GET /:id/url — short-lived signed URL for an attachment ─────────────────
+// Auth: any authenticated user can request URLs for their own uploads;
+// MASTER_ADMIN/ADMIN can request any. Admin retrievals of attachments they
+// did not upload write a RETRIEVE_ATTACHMENT audit row.
+attachmentsRoute.get('/:id/url', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const attachmentId = c.req.param('id')
+
+  const attachment = await db.attachment.findUnique({
+    where: { id: attachmentId },
+    select: { id: true, uploadedBy: true, entityType: true, entityId: true },
+  })
+  if (!attachment) throw ApiError.notFound('Attachment not found')
+
+  const isUploader = attachment.uploadedBy === user.id
+  const isAdmin = user.role === 'MASTER_ADMIN' || user.role === 'ADMIN'
+
+  if (!isUploader && !isAdmin) {
+    throw ApiError.forbidden('You do not have access to this attachment')
+  }
+
+  if (isAdmin && !isUploader) {
+    await db.auditLog.create({
+      data: {
+        action: 'RETRIEVE_ATTACHMENT',
+        entity: 'Attachment',
+        entityId: attachment.id,
+        actorId: user.id,
+        after: {
+          attachmentId: attachment.id,
+          entityType: attachment.entityType,
+          entityId: attachment.entityId,
+        },
+      },
+    })
+  }
+
+  const url = await getAttachmentUrl(attachment.id)
+  return c.json({ ok: true, data: { url } })
 })

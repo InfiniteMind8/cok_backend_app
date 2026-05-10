@@ -45,6 +45,8 @@ import { depositsRoute } from './deposits.js'
 import { treasuryRoute } from './treasury.js'
 import { vouchersRoute } from './vouchers.js'
 import { reconciliationRoute } from './reconciliation.js'
+import { accountsRoute } from './accounts.js'
+import { adminAttachmentsRoute } from './attachments.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
@@ -66,6 +68,12 @@ adminRouter.route('/treasury', treasuryRoute)
 adminRouter.route('/vouchers', vouchersRoute)
 adminRouter.route('/reconciliation', reconciliationRoute)
 
+// Phase 3 batch 3 — accounts + admin-side attachment management.
+// (data-directory MFA reset is on dataDirectoryRoute itself; attachment URL
+// retrieval is at /v1/attachments/:id/url since it allows the uploader too.)
+adminRouter.route('/accounts', accountsRoute)
+adminRouter.route('/attachments', adminAttachmentsRoute)
+
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
@@ -73,7 +81,7 @@ adminRouter.get('/', (c) =>
       message:
         'admin router live. Mounted: /audit-log, /data-directory, /settlements, ' +
         '/voucher-requests, /property-transfers, /rental-extensions, /deposits, ' +
-        '/treasury, /vouchers, /reconciliation.',
+        '/treasury, /vouchers, /reconciliation, /accounts, /attachments.',
     },
   }),
 )
