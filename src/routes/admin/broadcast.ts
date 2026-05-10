@@ -6,8 +6,16 @@ import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { createAuditEntry } from '../../lib/audit/index.js'
 import { sendEmail } from '../../lib/email/service.js'
+import { getRecentEmergencyBroadcasts } from '../../lib/queries/broadcast.js'
 
 export const broadcastRoute = new Hono<AppEnv>()
+
+// ─── GET /recent — recent emergency broadcasts (admin overview) ──────────────
+broadcastRoute.get('/recent', async (c) => {
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : 5
+  const broadcasts = await getRecentEmergencyBroadcasts(limit)
+  return c.json({ ok: true, data: broadcasts })
+})
 
 const CHUNK_SIZE = 50
 

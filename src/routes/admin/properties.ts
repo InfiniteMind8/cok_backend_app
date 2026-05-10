@@ -9,8 +9,38 @@ import {
 } from '@prisma/client'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
+import { ApiError } from '../../lib/api-error.js'
+import { getProperties, getPropertyDetail } from '../../lib/queries/properties.js'
 
 export const propertiesRoute = new Hono<AppEnv>()
+
+// ─── GET / — paginated property list ─────────────────────────────────────────
+propertiesRoute.get('/', async (c) => {
+  const page = c.req.query('page') ? parseInt(c.req.query('page')!, 10) : 1
+  const pageSize = c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : 20
+  const { properties, total } = await getProperties(page, pageSize)
+  return c.json({
+    ok: true,
+    data: {
+      properties: properties.map((p) => ({
+        ...p,
+        totalPrice: p.totalPrice?.toString() ?? null,
+        currentValuationKcrd: p.currentValuationKcrd?.toString() ?? null,
+        sizeSqm: p.sizeSqm?.toString() ?? null,
+        paidPct: p.paidPct.toString(),
+      })),
+      total,
+    },
+  })
+})
+
+// ─── GET /:propertyId — full property detail ─────────────────────────────────
+propertiesRoute.get('/:propertyId', async (c) => {
+  const propertyId = c.req.param('propertyId')
+  const property = await getPropertyDetail(propertyId)
+  if (!property) throw ApiError.notFound('Property not found')
+  return c.json({ ok: true, data: property })
+})
 
 // ─── POST / — create a property ──────────────────────────────────────────────
 const attachmentInputSchema = z.object({

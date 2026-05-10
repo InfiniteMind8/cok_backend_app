@@ -4,8 +4,24 @@ import { z } from 'zod'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
+import { getVisitorGroups, getVisitorGroupById } from '../../lib/queries/visitor-groups.js'
 
 export const visitorGroupsRoute = new Hono<AppEnv>()
+
+// ─── GET / — list groups (optionally including archived) ─────────────────────
+visitorGroupsRoute.get('/', async (c) => {
+  const includeArchived = c.req.query('includeArchived') === 'true'
+  const groups = await getVisitorGroups(includeArchived)
+  return c.json({ ok: true, data: groups })
+})
+
+// ─── GET /:id — single group with members ────────────────────────────────────
+visitorGroupsRoute.get('/:id', async (c) => {
+  const id = c.req.param('id')
+  const group = await getVisitorGroupById(id)
+  if (!group) throw ApiError.notFound('Group not found')
+  return c.json({ ok: true, data: group })
+})
 
 async function writeAuditLog(
   actorId: string,

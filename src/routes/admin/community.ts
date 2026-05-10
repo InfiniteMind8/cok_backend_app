@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import {
   AnnouncementTargetType,
+  type IssueLevel,
   type IssueStatus,
   type Role,
 } from '@prisma/client'
@@ -10,8 +11,58 @@ import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
 import { notify, notifyAllOfRole } from '../../lib/notifications/service.js'
+import {
+  getAdminVotes,
+  getCommunityUpdates,
+  getIssueDetail,
+  getIssues,
+  getVotes,
+} from '../../lib/queries/community.js'
 
 export const communityRoute = new Hono<AppEnv>()
+
+// ─── GET /updates — paginated community updates ──────────────────────────────
+communityRoute.get('/updates', async (c) => {
+  const page = c.req.query('page') ? parseInt(c.req.query('page')!, 10) : 1
+  const pageSize = c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : 20
+  const { updates, total } = await getCommunityUpdates(page, pageSize)
+  return c.json({ ok: true, data: { updates, total } })
+})
+
+// ─── GET /votes — admin view of votes (with submission breakdowns) ───────────
+communityRoute.get('/votes', async (c) => {
+  const filter = (c.req.query('filter') as 'open' | 'closed' | 'all' | undefined) ?? 'all'
+  // /votes returns the simple list; /votes/admin includes submission detail
+  const votes = await getVotes(filter)
+  return c.json({ ok: true, data: votes })
+})
+
+communityRoute.get('/votes/admin', async (c) => {
+  const votes = await getAdminVotes()
+  return c.json({ ok: true, data: votes })
+})
+
+// ─── GET /issues — paginated issues with reporter/assignee + filters ─────────
+communityRoute.get('/issues', async (c) => {
+  const filters = {
+    role: (c.req.query('role') as Role | undefined) ?? undefined,
+    seriousness: (c.req.query('seriousness') as IssueLevel | undefined) ?? undefined,
+    urgency: (c.req.query('urgency') as IssueLevel | undefined) ?? undefined,
+    status: (c.req.query('status') as IssueStatus | undefined) ?? undefined,
+    page: c.req.query('page') ? parseInt(c.req.query('page')!, 10) : undefined,
+    pageSize: c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : undefined,
+  }
+  const { issues, total } = await getIssues(filters)
+  return c.json({ ok: true, data: { issues, total } })
+})
+
+// ─── GET /issues/:issueId — single issue with replies ────────────────────────
+communityRoute.get('/issues/:issueId', async (c) => {
+  const issueId = c.req.param('issueId')
+  const issue = await getIssueDetail(issueId)
+  if (!issue) throw ApiError.notFound('Issue not found')
+  return c.json({ ok: true, data: issue })
+})
 
 // ─── POST /updates — publish a community update ──────────────────────────────
 const publishUpdateSchema = z.object({

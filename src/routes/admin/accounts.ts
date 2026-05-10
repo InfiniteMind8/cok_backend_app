@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { Role, AttachmentEntityType } from '@prisma/client'
+import { Role, AccountStatus, AttachmentEntityType } from '@prisma/client'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { env } from '../../lib/env.js'
@@ -9,8 +9,48 @@ import { ApiError } from '../../lib/api-error.js'
 import { clerkClient } from '../../lib/clerk.js'
 import { sendEmail } from '../../lib/email/service.js'
 import { generateUniqueMemberId } from '../../lib/member-id.js'
+import { getUsers, getUserDetail, getAllUsersForSelect } from '../../lib/queries/accounts.js'
 
 export const accountsRoute = new Hono<AppEnv>()
+
+// ─── GET / — paginated list with filters ─────────────────────────────────────
+accountsRoute.get('/', async (c) => {
+  const filters = {
+    role: (c.req.query('role') as Role | undefined) ?? undefined,
+    status: (c.req.query('status') as AccountStatus | undefined) ?? undefined,
+    search: c.req.query('search'),
+    page: c.req.query('page') ? parseInt(c.req.query('page')!, 10) : undefined,
+    pageSize: c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : undefined,
+  }
+  const { users, total } = await getUsers(filters)
+  return c.json({
+    ok: true,
+    data: {
+      users: users.map((u) => ({
+        ...u,
+        walletBalance: u.walletBalance?.toString() ?? null,
+      })),
+      total,
+    },
+  })
+})
+
+// ─── GET /select — minimal user list for select inputs ───────────────────────
+accountsRoute.get('/select', async (c) => {
+  const users = await getAllUsersForSelect()
+  return c.json({ ok: true, data: users })
+})
+
+// ─── GET /:id — full account detail ──────────────────────────────────────────
+accountsRoute.get('/:id', async (c) => {
+  const userId = c.req.param('id')
+  const user = await getUserDetail(userId)
+  if (!user) throw ApiError.notFound('User not found')
+  return c.json({
+    ok: true,
+    data: { ...user, walletBalance: user.walletBalance?.toString() ?? null },
+  })
+})
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

@@ -1,9 +1,25 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
-import { getAuditLogsForExport } from '../../lib/queries/audit-log.js'
+import { getAuditLogs, getAuditLogsForExport } from '../../lib/queries/audit-log.js'
 
 export const auditLogRoute = new Hono<AppEnv>()
+
+// ─── GET / — paginated list (separate from /export which streams CSV) ────────
+auditLogRoute.get('/', async (c) => {
+  const filters = {
+    actorId: c.req.query('actorId'),
+    action: c.req.query('action'),
+    entity: c.req.query('entity'),
+    entityId: c.req.query('entityId'),
+    dateFrom: c.req.query('dateFrom'),
+    dateTo: c.req.query('dateTo'),
+    page: c.req.query('page') ? parseInt(c.req.query('page')!, 10) : undefined,
+    pageSize: c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : undefined,
+  }
+  const { logs, total } = await getAuditLogs(filters)
+  return c.json({ ok: true, data: { logs, total } })
+})
 
 // Inherits MASTER_ADMIN gate from the parent admin router.
 // (Audit log export is also acceptable for ADMIN per Phase 1+ D-D4-01;

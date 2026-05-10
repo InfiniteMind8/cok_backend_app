@@ -10,8 +10,51 @@ import { ApiError } from '../../lib/api-error.js'
 import { clerkClient } from '../../lib/clerk.js'
 import { sendEmail } from '../../lib/email/service.js'
 import { getAttachmentsByEntity } from '../../lib/storage/attachments.js'
+import {
+  getDirectoryTree,
+  getIssueEntityDetail,
+  getLeaseEntityDetail,
+  getPropertyEntityDetail,
+  getUserEntityDetail,
+} from '../../lib/queries/data-directory.js'
 
 export const dataDirectoryRoute = new Hono<AppEnv>()
+
+// ─── GET /tree — directory tree with optional search ─────────────────────────
+dataDirectoryRoute.get('/tree', async (c) => {
+  const search = c.req.query('search')
+  const tree = await getDirectoryTree(search)
+  return c.json({ ok: true, data: tree })
+})
+
+// ─── GET /entity/:type/:id — full entity detail ──────────────────────────────
+// Type is one of: User | Property | Lease | Issue. Lib functions return null
+// when not found; surface as 404.
+dataDirectoryRoute.get('/entity/:type/:id', async (c) => {
+  const type = c.req.param('type')
+  const id = c.req.param('id')
+
+  let entity: unknown
+  switch (type) {
+    case 'User':
+      entity = await getUserEntityDetail(id)
+      break
+    case 'Property':
+      entity = await getPropertyEntityDetail(id)
+      break
+    case 'Lease':
+      entity = await getLeaseEntityDetail(id)
+      break
+    case 'Issue':
+      entity = await getIssueEntityDetail(id)
+      break
+    default:
+      throw ApiError.validation(`Unknown entity type: ${type}`)
+  }
+
+  if (!entity) throw ApiError.notFound(`${type} not found`)
+  return c.json({ ok: true, data: entity })
+})
 
 // ─── POST /users/:userId/reset-mfa ───────────────────────────────────────────
 // Forces a Clerk MFA reset for the target user. Records an audit row, then
