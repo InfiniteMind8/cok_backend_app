@@ -7,10 +7,59 @@ import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
 import { requireRole } from '../../middleware/auth.js'
 import { requestSettlement } from '../../lib/ledger/settlements.js'
-import { getWalletBalance } from '../../lib/ledger/balance.js'
+import { getWalletBalance, getWalletSummary } from '../../lib/ledger/balance.js'
+import { getRecentTransactions, getUserSettlementRequests } from '../../lib/queries/wallet.js'
 import { getTransactionPage } from '../../lib/queries/wallet.js'
 
 export const residentWalletRoute = new Hono<AppEnv>()
+
+// ─── GET /summary — caller's wallet balance + per-bucket aggregates ──────────
+residentWalletRoute.get('/summary', async (c) => {
+  const user = c.get('user')!
+  const wallet = await db.wallet.findUnique({ where: { userId: user.id } })
+  if (!wallet) throw ApiError.notFound('Wallet not found')
+
+  const summary = await getWalletSummary(wallet.id)
+  return c.json({
+    ok: true,
+    data: {
+      walletId: wallet.id,
+      balance: summary.balance.toString(),
+      totalDeposited: summary.totalDeposited.toString(),
+      totalEarned: summary.totalEarned.toString(),
+      totalEligibleForConversion: summary.totalEligibleForConversion.toString(),
+    },
+  })
+})
+
+// ─── GET /transactions/recent?limit= ─────────────────────────────────────────
+residentWalletRoute.get(
+  '/transactions/recent',
+  requireRole('RESIDENT', 'VISITOR'),
+  async (c) => {
+    const user = c.get('user')!
+    const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : 10
+
+    const wallet = await db.wallet.findUnique({ where: { userId: user.id } })
+    if (!wallet) throw ApiError.notFound('Wallet not found')
+
+    const entries = await getRecentTransactions(wallet.id, limit)
+    return c.json({ ok: true, data: { entries } })
+  },
+)
+
+// ─── GET /settlements — caller's settlement request history ──────────────────
+residentWalletRoute.get('/settlements', requireRole('RESIDENT'), async (c) => {
+  const user = c.get('user')!
+  const requests = await getUserSettlementRequests(user.id)
+  return c.json({
+    ok: true,
+    data: requests.map((r) => ({
+      ...r,
+      amount: r.amount.toString(),
+    })),
+  })
+})
 
 // ─── POST /wallet/settlements — request a settlement ─────────────────────────
 const requestSettlementSchema = z.object({

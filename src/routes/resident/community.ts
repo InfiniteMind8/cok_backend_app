@@ -1,14 +1,68 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { AttachmentEntityType, IssueLevel } from '@prisma/client'
+import { AttachmentEntityType, IssueLevel, type Role } from '@prisma/client'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
 import { requireRole } from '../../middleware/auth.js'
 import { notifyAllOfRole } from '../../lib/notifications/service.js'
+import {
+  getMyIssues,
+  getNotifications,
+  getUnreadNotificationCount,
+  getUpdatesWithAcknowledgements,
+  getVotesWithUserSubmissions,
+} from '../../lib/queries/community.js'
+import { getUserActiveGroupIds } from '../../lib/queries/visitor-groups.js'
 
 export const residentCommunityRoute = new Hono<AppEnv>()
+
+// ─── GET /updates — caller's community feed (paginated, target-filtered) ─────
+residentCommunityRoute.get('/updates', async (c) => {
+  const user = c.get('user')!
+  const page = c.req.query('page') ? parseInt(c.req.query('page')!, 10) : 1
+  const pageSize = c.req.query('pageSize') ? parseInt(c.req.query('pageSize')!, 10) : 20
+
+  const groupIds = await getUserActiveGroupIds(user.id)
+  const { updates, total } = await getUpdatesWithAcknowledgements(
+    user.id,
+    user.role as Role,
+    groupIds,
+    page,
+    pageSize,
+  )
+  return c.json({ ok: true, data: { updates, total } })
+})
+
+// ─── GET /votes — votes with this caller's submission status ─────────────────
+residentCommunityRoute.get('/votes', async (c) => {
+  const user = c.get('user')!
+  const votes = await getVotesWithUserSubmissions(user.id)
+  return c.json({ ok: true, data: votes })
+})
+
+// ─── GET /issues/mine — caller's own issues + replies ────────────────────────
+residentCommunityRoute.get('/issues/mine', async (c) => {
+  const user = c.get('user')!
+  const issues = await getMyIssues(user.id)
+  return c.json({ ok: true, data: issues })
+})
+
+// ─── GET /notifications?limit= ───────────────────────────────────────────────
+residentCommunityRoute.get('/notifications', async (c) => {
+  const user = c.get('user')!
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : 50
+  const notifications = await getNotifications(user.id, limit)
+  return c.json({ ok: true, data: notifications })
+})
+
+// ─── GET /notifications/unread-count ─────────────────────────────────────────
+residentCommunityRoute.get('/notifications/unread-count', async (c) => {
+  const user = c.get('user')!
+  const count = await getUnreadNotificationCount(user.id)
+  return c.json({ ok: true, data: { count } })
+})
 
 // ─── POST /community/updates/:id/acknowledge ─────────────────────────────────
 // Mark a community update as acknowledged. Open to any authenticated user

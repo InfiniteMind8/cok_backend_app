@@ -6,8 +6,53 @@ import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
 import { requireRole } from '../../middleware/auth.js'
 import { notifyAllOfRole } from '../../lib/notifications/service.js'
+import { getResidentProperty } from '../../lib/queries/properties.js'
 
 export const residentPropertyRoute = new Hono<AppEnv>()
+
+// ─── GET /current — caller's primary property (ownership or tenancy) ─────────
+// Returns null when the caller has no property. Decimal fields stringified
+// per the MoneyString convention.
+residentPropertyRoute.get('/current', async (c) => {
+  const user = c.get('user')!
+  const result = await getResidentProperty(user.id)
+  if (!result) return c.json({ ok: true, data: null })
+
+  if (result.kind === 'ownership') {
+    return c.json({
+      ok: true,
+      data: {
+        kind: 'ownership' as const,
+        ownership: result.ownership,
+        property: {
+          ...result.property,
+          totalPrice: result.property.totalPrice?.toString() ?? null,
+          currentValuationKcrd: result.property.currentValuationKcrd?.toString() ?? null,
+          sizeSqm: result.property.sizeSqm?.toString() ?? null,
+        },
+        paidPct: result.paidPct.toString(),
+        paidAmount: result.paidAmount.toString(),
+        totalPrice: result.totalPrice.toString(),
+        outstanding: result.outstanding.toString(),
+        nextInstallment: result.nextInstallment,
+      },
+    })
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      kind: 'tenancy' as const,
+      tenancy: result.tenancy,
+      property: {
+        ...result.property,
+        totalPrice: result.property.totalPrice?.toString() ?? null,
+        currentValuationKcrd: result.property.currentValuationKcrd?.toString() ?? null,
+        sizeSqm: result.property.sizeSqm?.toString() ?? null,
+      },
+    },
+  })
+})
 
 // ─── POST /property/extension-request ────────────────────────────────────────
 // Resident requests an extension on their tenancy. Admin approval/decline

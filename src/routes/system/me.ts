@@ -6,8 +6,25 @@ import { ApiError } from '../../lib/api-error.js'
 import { db } from '../../lib/db.js'
 import { requireRole } from '../../middleware/auth.js'
 import { getStorage } from '../../lib/storage/driver.js'
+import { getActiveEmergencyBroadcasts } from '../../lib/queries/broadcast.js'
+import { getTourStatus } from '../../lib/queries/tour.js'
 
 export const meRoute = new Hono<AppEnv>()
+
+// ─── GET /tour-status — should the onboarding tour show? ─────────────────────
+meRoute.get('/tour-status', async (c) => {
+  const user = c.get('user')!
+  const status = await getTourStatus(user.id)
+  return c.json({ ok: true, data: status })
+})
+
+// ─── GET /broadcasts/active — unacknowledged emergency broadcasts ────────────
+// Drives the persistent banner at the top of the resident UI.
+meRoute.get('/broadcasts/active', async (c) => {
+  const user = c.get('user')!
+  const broadcasts = await getActiveEmergencyBroadcasts(user.id)
+  return c.json({ ok: true, data: broadcasts })
+})
 
 // ─── GET / — current user profile ────────────────────────────────────────────
 meRoute.get('/', async (c) => {
