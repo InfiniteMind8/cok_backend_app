@@ -1,10 +1,10 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { recordDeposit } from '../ledger/deposits'
-import { transferCredits } from '../ledger/service'
-import { requestSettlement, approveSettlement } from '../ledger/settlements'
-import { getAllWalletRows, formatKCredit } from '../ledger/balance'
-import { reconcileTreasury } from '../ledger/reconciliation'
+import { recordDeposit } from '../../src/lib/ledger/deposits.js'
+import { transferCredits } from '../../src/lib/ledger/service.js'
+import { requestSettlement, approveSettlement } from '../../src/lib/ledger/settlements.js'
+import { getAllWalletRows, formatKCredit } from '../../src/lib/ledger/balance.js'
+import { reconcileTreasury } from '../../src/lib/ledger/reconciliation.js'
 
 // Demo uses its own PrismaClient (same pattern as seed.ts)
 // The ledger modules import from lib/db — we patch the global so they share the same instance

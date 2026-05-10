@@ -21,7 +21,8 @@ meRoute.get('/', async (c) => {
       profilePhotoUrl: true,
       displayCurrency: true,
       foundingMember: true,
-      twoFactorEnabled: true,
+      // MFA enrolment lives on Clerk, not Prisma. Callers that need this
+      // should hit Clerk's getUser() — see src/lib/mfa/index.ts.
       onboardingTourCompletedAt: true,
       onboardingTourDismissedAt: true,
       createdAt: true,
