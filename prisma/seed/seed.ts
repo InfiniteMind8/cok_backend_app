@@ -43,6 +43,20 @@ async function main() {
     console.log(`  System wallet: ${key}`)
   }
 
+  // Throw on missing keys/emails so callers see a clear error instead of
+  // Prisma rejecting `undefined`. Both maps are populated above before any
+  // call site below.
+  const sysWalletId = (key: string): string => {
+    const w = systemWallets[key]
+    if (!w) throw new Error(`System wallet missing in seed: ${key}`)
+    return w.id
+  }
+  const userId = (email: string): string => {
+    const id = createdUsers[email]
+    if (!id) throw new Error(`User missing in seed: ${email}`)
+    return id
+  }
+
   // ── Users & personal wallets ─────────────────────────────────────────────────
   const userData = [
     {
@@ -147,7 +161,7 @@ async function main() {
         await db.ledgerEntry.create({
           data: {
             transactionId: tx.id,
-            walletId: systemWallets['treasury_reserve'].id,
+            walletId: sysWalletId('treasury_reserve'),
             amount: -u.initialBalance,
             description: 'Treasury reserve backing',
           },
@@ -173,13 +187,13 @@ async function main() {
       data: {
         type: 'TREASURY_ADJUSTMENT',
         description: 'Initial treasury reserve',
-        initiatedBy: createdUsers['karis@cityofkaris.com'],
+        initiatedBy: userId('karis@cityofkaris.com'),
       },
     })
     await db.ledgerEntry.create({
       data: {
         transactionId: tx.id,
-        walletId: systemWallets['treasury_reserve'].id,
+        walletId: sysWalletId('treasury_reserve'),
         amount: 50000,
         description: 'Starting treasury reserve — USD 50,000 equivalent',
       },
@@ -194,7 +208,7 @@ async function main() {
     create: {
       id: 'genesis-fee-schedule',
       effectiveAt: new Date(Date.now() - 60_000), // 1 minute ago — immediately active
-      createdBy: createdUsers['karis@cityofkaris.com'],
+      createdBy: userId('karis@cityofkaris.com'),
       rules: {
         PURCHASE:            { totalPct: 2.5, communityFundPct: 1.5, operationsFundPct: 0.5, developerSharePct: 0.5 },
         VENDOR_SETTLEMENT:   { totalPct: 1.0, communityFundPct: 0.5, operationsFundPct: 0.5, developerSharePct: 0 },
@@ -211,8 +225,8 @@ async function main() {
 
   // ── Property demo data ──────────────────────────────────────────────────────
 
-  const devonId = createdUsers['devon@example.com']
-  const aaliyahId = createdUsers['aaliyah@example.com']
+  const devonId = userId('devon@example.com')
+  const aaliyahId = userId('aaliyah@example.com')
 
   // Devon — Ownership (Residence-A12)
   const existingA12 = await db.property.findFirst({ where: { code: 'RESIDENCE-A12' } })
@@ -276,12 +290,15 @@ async function main() {
 
     // Mark installments 1–4 as paid
     for (let i = 0; i < 4; i++) {
+      const inst = installments[i]
+      const def = installmentDefs[i]
+      if (!inst || !def) continue
       await db.propertyPayment.create({
         data: {
-          installmentId: installments[i].id,
+          installmentId: inst.id,
           ownershipId: ownership.id,
           amount: 47500,
-          paidAt: new Date(installmentDefs[i].dueDate),
+          paidAt: new Date(def.dueDate),
         },
       })
     }
@@ -353,9 +370,9 @@ async function main() {
 
   // ── Community demo content ────────────────────────────────────────────────────
 
-  const karisId = createdUsers['karis@cityofkaris.com']
-  const naomiId = createdUsers['naomi@cityofkaris.com']
-  const marcusId = createdUsers['marcus@example.com']
+  const karisId = userId('karis@cityofkaris.com')
+  const naomiId = userId('naomi@cityofkaris.com')
+  const marcusId = userId('marcus@example.com')
 
   const seedNow = new Date()
   const daysAgo = (n: number) => new Date(seedNow.getTime() - n * 24 * 60 * 60 * 1000)
@@ -417,13 +434,17 @@ async function main() {
 
   // Vote
   const voteHeadline = 'How should we direct the next K 25,000 from the Community Investment Fund?'
-  let vote = await db.vote.findFirst({
+  const existingVote = await db.vote.findFirst({
     where: { headline: voteHeadline },
     include: { options: true },
   })
 
-  if (!vote) {
-    vote = await db.vote.create({
+  let voteRow: { id: string; options: { id: string; label: string }[] }
+  if (existingVote) {
+    voteRow = existingVote
+    console.log('  Vote: Community Investment Fund already exists — skipped')
+  } else {
+    const created = await db.vote.create({
       data: {
         headline: voteHeadline,
         description:
@@ -451,22 +472,25 @@ async function main() {
           ],
         },
       },
+    })
+    // Re-fetch with options. Inline `include` on .create() doesn't always
+    // narrow the return type under Prisma 7 — separate fetch keeps types clean.
+    voteRow = await db.vote.findUniqueOrThrow({
+      where: { id: created.id },
       include: { options: true },
     })
     console.log('  Vote: Community Investment Fund')
-  } else {
-    console.log('  Vote: Community Investment Fund already exists — skipped')
   }
 
   // Devon's vote submission (amphitheater — first option)
-  const amphitheaterOption = vote.options[0]
+  const amphitheaterOption = voteRow.options[0]
   const existingSubmission = await db.voteSubmission.findFirst({
-    where: { voteId: vote.id, userId: devonId },
+    where: { voteId: voteRow.id, userId: devonId },
   })
   if (!existingSubmission && amphitheaterOption) {
     await db.voteSubmission.create({
       data: {
-        voteId: vote.id,
+        voteId: voteRow.id,
         optionId: amphitheaterOption.id,
         userId: devonId,
         submittedAt: daysAgo(1),
