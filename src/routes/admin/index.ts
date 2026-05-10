@@ -50,6 +50,8 @@ import { adminAttachmentsRoute } from './attachments.js'
 import { communityRoute } from './community.js'
 import { broadcastRoute } from './broadcast.js'
 import { emailRoute } from './email.js'
+import { importsRoute } from './imports.js'
+import { propertiesRoute } from './properties.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
@@ -84,6 +86,10 @@ adminRouter.route('/community', communityRoute)
 adminRouter.route('/broadcasts', broadcastRoute)
 adminRouter.route('/emails', emailRoute)
 
+// Phase 3 batch 5 — imports + property CRUD ported from website/_actions/*.
+adminRouter.route('/imports', importsRoute)
+adminRouter.route('/properties', propertiesRoute)
+
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
@@ -92,7 +98,7 @@ adminRouter.get('/', (c) =>
         'admin router live. Mounted: /audit-log, /data-directory, /settlements, ' +
         '/voucher-requests, /property-transfers, /rental-extensions, /deposits, ' +
         '/treasury, /vouchers, /reconciliation, /accounts, /attachments, ' +
-        '/community, /broadcasts, /emails.',
+        '/community, /broadcasts, /emails, /imports, /properties.',
     },
   }),
 )
