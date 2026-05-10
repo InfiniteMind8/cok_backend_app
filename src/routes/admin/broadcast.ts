@@ -17,6 +17,19 @@ broadcastRoute.get('/recent', async (c) => {
   return c.json({ ok: true, data: broadcasts })
 })
 
+// ─── GET / — broadcast page bundle (active count + recent) ───────────────────
+// One round-trip for the broadcast page. Returns both the count of users that
+// would receive the broadcast and the recent-broadcast list rendered below
+// the form.
+broadcastRoute.get('/', async (c) => {
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : 5
+  const [activeCount, recent] = await Promise.all([
+    db.user.count({ where: { status: 'ACTIVE' } }),
+    getRecentEmergencyBroadcasts(limit),
+  ])
+  return c.json({ ok: true, data: { activeCount, recent } })
+})
+
 const CHUNK_SIZE = 50
 
 function subjectPrefix(severity: AnnouncementSeverity): string {
