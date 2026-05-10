@@ -57,6 +57,7 @@ import { ratesRoute } from './rates.js'
 import { promotionsRoute } from './promotions.js'
 import { visitorGroupsRoute } from './visitor-groups.js'
 import { dashboardRoute } from './dashboard.js'
+import { approvalsRoute } from './approvals.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
@@ -98,6 +99,11 @@ adminRouter.route('/properties', propertiesRoute)
 // Phase 6 batch 6.1 — admin dashboard aggregate (GET endpoints; the existing
 // resource routers were also extended with GET list/detail in 6.1).
 adminRouter.route('/dashboard', dashboardRoute)
+
+// Phase 6.5a — approvals page bundle (counts + per-tab pending requests).
+// Aggregates across settlements, transfers, voucher requests, and rental
+// extensions so the page can render with one round-trip per tab.
+adminRouter.route('/approvals', approvalsRoute)
 
 // Phase 3 batch 6 — settings (fee schedule, rates, promotions, visitor groups).
 // Tour completion is on /v1/me/tour/* since it's caller-scoped (Phase 4);

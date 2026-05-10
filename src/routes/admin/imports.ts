@@ -14,6 +14,45 @@ import { parsePropertiesSheet } from '../../lib/imports/properties-parser.js'
 
 export const importsRoute = new Hono<AppEnv>()
 
+// ─── GET /sessions/:sessionId — preview a parsed import session ──────────────
+// Backs /admin/imports/{members,properties}/[sessionId]. Returns the session
+// header + its parsed rows so the preview table can render without hitting
+// Prisma directly.
+importsRoute.get('/sessions/:sessionId', async (c) => {
+  const sessionId = c.req.param('sessionId')
+
+  const session = await db.importSession.findUnique({
+    where: { id: sessionId },
+    include: { rows: { orderBy: { rowNumber: 'asc' } } },
+  })
+
+  if (!session) throw ApiError.notFound('Import session not found')
+
+  return c.json({
+    ok: true,
+    data: {
+      id: session.id,
+      type: session.type,
+      fileName: session.fileName,
+      status: session.status,
+      totalRows: session.totalRows,
+      validCount: session.validCount,
+      warningCount: session.warningCount,
+      errorCount: session.errorCount,
+      committedCount: session.committedCount,
+      skippedCount: session.skippedCount,
+      createdAt: session.createdAt.toISOString(),
+      rows: session.rows.map((r) => ({
+        id: r.id,
+        rowNumber: r.rowNumber,
+        rowData: r.rowData,
+        status: r.status,
+        messages: r.messages,
+      })),
+    },
+  })
+})
+
 // MAX_IMPORT_ROWS comes from env (default 1000) so prod can lift the cap
 // without redeploying.
 const MAX_IMPORT_ROWS = env.IMPORT_MAX_ROWS

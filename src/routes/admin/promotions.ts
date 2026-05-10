@@ -8,6 +8,32 @@ import { ApiError } from '../../lib/api-error.js'
 
 export const promotionsRoute = new Hono<AppEnv>()
 
+// ─── GET / — list all promotions, ordered by created date (desc) ─────────────
+// Backs /admin/settings/promotions. The page partitions the response into
+// active / scheduled / expired buckets client-side using `active`, `startsAt`,
+// `endsAt`, so we ship every row in one round-trip.
+promotionsRoute.get('/', async (c) => {
+  const promotions = await db.conversionPromotion.findMany({
+    orderBy: { createdAt: 'desc' },
+  })
+  return c.json({
+    ok: true,
+    data: promotions.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      bonusPercent: p.bonusPercent.toString(),
+      direction: p.direction,
+      eligibility: p.eligibility,
+      eligibleUserIds: p.eligibleUserIds,
+      startsAt: p.startsAt.toISOString(),
+      endsAt: p.endsAt.toISOString(),
+      active: p.active,
+      createdAt: p.createdAt.toISOString(),
+    })),
+  })
+})
+
 // ─── POST / — create a conversion promotion ──────────────────────────────────
 const createPromotionSchema = z.object({
   name: z.string().min(1),

@@ -1,12 +1,81 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import type { AppEnv } from '../../server.js'
 import { db } from '../../lib/db.js'
 import { ApiError } from '../../lib/api-error.js'
+import { getActiveFeeSchedule } from '../../lib/ledger/fee-engine.js'
+import { getSystemWalletSummary } from '../../lib/queries/dashboard.js'
 import type { FeeScheduleRules } from '../../lib/ledger/types.js'
 
 export const settingsRoute = new Hono<AppEnv>()
+
+// ─── GET / — settings page bundle ────────────────────────────────────────────
+// Active fee schedule + system wallets + recent admin activity. The fee-
+// schedule history is fetched via /fee-schedule/history below and is paged
+// independently because it can grow unbounded.
+settingsRoute.get('/', async (c) => {
+  const [feeSchedule, systemWallets, adminUsers] = await Promise.all([
+    getActiveFeeSchedule(),
+    getSystemWalletSummary(),
+    db.user.findMany({
+      where: { role: { in: ['MASTER_ADMIN', 'ADMIN'] } },
+      select: { id: true, fullName: true, memberId: true },
+    }),
+  ])
+
+  const adminIds = adminUsers.map((u) => u.id)
+  const nameMap = new Map(adminUsers.map((u) => [u.id, u.fullName]))
+
+  const transactions = await db.transaction.findMany({
+    where: { initiatedBy: { in: adminIds } },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    include: {
+      entries: {
+        where: { amount: { gt: 0 } },
+        select: { amount: true },
+      },
+    },
+  })
+
+  const recentActivity = transactions.map((t) => {
+    const total = t.entries.reduce(
+      (sum, e) => sum.add(e.amount),
+      new Prisma.Decimal(0),
+    )
+    return {
+      id: t.id,
+      type: t.type,
+      description: t.description,
+      total: total.toFixed(2),
+      createdAt: t.createdAt.toISOString(),
+      initiatedByName: t.initiatedBy ? (nameMap.get(t.initiatedBy) ?? 'Unknown') : '—',
+    }
+  })
+
+  return c.json({
+    ok: true,
+    data: {
+      feeSchedule: feeSchedule
+        ? {
+            id: feeSchedule.id,
+            effectiveAt: feeSchedule.effectiveAt.toISOString(),
+            rules: feeSchedule.rules as FeeScheduleRules,
+          }
+        : null,
+      systemWallets: systemWallets.map((w) => ({
+        walletId: w.walletId,
+        key: w.key,
+        balance: w.balance.toFixed(2),
+        floor: w.floor !== null ? w.floor.toFixed(2) : null,
+        headroom: w.headroom !== null ? w.headroom.toFixed(2) : null,
+      })),
+      recentActivity,
+    },
+  })
+})
 
 // ─── Apply a fee schedule ────────────────────────────────────────────────────
 const feeRuleSchema = z.object({
@@ -135,5 +204,3 @@ settingsRoute.get('/fee-schedule/history', async (c) => {
   return c.json({ ok: true, data: rows })
 })
 
-// Local Prisma import only used for JsonNull in audit entries above.
-import { Prisma } from '@prisma/client'
