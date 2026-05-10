@@ -37,22 +37,32 @@ import { requireRole } from '../../middleware/auth.js'
  */
 import { auditLogRoute } from './audit-log.js'
 import { dataDirectoryRoute } from './data-directory.js'
+import { settlementsRoute } from './settlements.js'
+import { voucherRequestsRoute } from './voucher-requests.js'
+import { propertyTransfersRoute } from './property-transfers.js'
+import { rentalExtensionsRoute } from './rental-extensions.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
 adminRouter.use('*', requireRole('MASTER_ADMIN'))
 
-// Phase 2 Block B.4 — exporters/cron-adjacent admin routes ported from
-// website/app/api/admin/*. Action routes (accounts, treasury, approvals,
-// imports, etc.) ported from website/_actions/* land in Phase 3.
+// Phase 2 — exporters ported from website/app/api/admin/*.
 adminRouter.route('/audit-log', auditLogRoute)
 adminRouter.route('/data-directory', dataDirectoryRoute)
+
+// Phase 3 batch 1 — approvals/decisions ported from website/_actions/*.
+adminRouter.route('/settlements', settlementsRoute)
+adminRouter.route('/voucher-requests', voucherRequestsRoute)
+adminRouter.route('/property-transfers', propertyTransfersRoute)
+adminRouter.route('/rental-extensions', rentalExtensionsRoute)
 
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
     data: {
-      message: 'admin router live. Sub-routes mounted: /audit-log, /data-directory.',
+      message:
+        'admin router live. Mounted: /audit-log, /data-directory, /settlements, ' +
+        '/voucher-requests, /property-transfers, /rental-extensions.',
     },
   }),
 )
