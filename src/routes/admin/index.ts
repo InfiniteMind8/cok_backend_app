@@ -52,6 +52,10 @@ import { broadcastRoute } from './broadcast.js'
 import { emailRoute } from './email.js'
 import { importsRoute } from './imports.js'
 import { propertiesRoute } from './properties.js'
+import { settingsRoute } from './settings.js'
+import { ratesRoute } from './rates.js'
+import { promotionsRoute } from './promotions.js'
+import { visitorGroupsRoute } from './visitor-groups.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
@@ -90,6 +94,14 @@ adminRouter.route('/emails', emailRoute)
 adminRouter.route('/imports', importsRoute)
 adminRouter.route('/properties', propertiesRoute)
 
+// Phase 3 batch 6 — settings (fee schedule, rates, promotions, visitor groups).
+// Tour completion is on /v1/me/tour/* since it's caller-scoped (Phase 4);
+// treasury floor is already inside /admin/treasury (Phase 3 batch 2).
+adminRouter.route('/settings', settingsRoute)
+adminRouter.route('/rates', ratesRoute)
+adminRouter.route('/promotions', promotionsRoute)
+adminRouter.route('/visitor-groups', visitorGroupsRoute)
+
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
@@ -98,7 +110,8 @@ adminRouter.get('/', (c) =>
         'admin router live. Mounted: /audit-log, /data-directory, /settlements, ' +
         '/voucher-requests, /property-transfers, /rental-extensions, /deposits, ' +
         '/treasury, /vouchers, /reconciliation, /accounts, /attachments, ' +
-        '/community, /broadcasts, /emails, /imports, /properties.',
+        '/community, /broadcasts, /emails, /imports, /properties, ' +
+        '/settings, /rates, /promotions, /visitor-groups.',
     },
   }),
 )
