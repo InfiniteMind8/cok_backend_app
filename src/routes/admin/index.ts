@@ -41,6 +41,10 @@ import { settlementsRoute } from './settlements.js'
 import { voucherRequestsRoute } from './voucher-requests.js'
 import { propertyTransfersRoute } from './property-transfers.js'
 import { rentalExtensionsRoute } from './rental-extensions.js'
+import { depositsRoute } from './deposits.js'
+import { treasuryRoute } from './treasury.js'
+import { vouchersRoute } from './vouchers.js'
+import { reconciliationRoute } from './reconciliation.js'
 
 export const adminRouter = new Hono<AppEnv>()
 
@@ -56,13 +60,20 @@ adminRouter.route('/voucher-requests', voucherRequestsRoute)
 adminRouter.route('/property-transfers', propertyTransfersRoute)
 adminRouter.route('/rental-extensions', rentalExtensionsRoute)
 
+// Phase 3 batch 2 — treasury/ledger ported from website/_actions/*.
+adminRouter.route('/deposits', depositsRoute)
+adminRouter.route('/treasury', treasuryRoute)
+adminRouter.route('/vouchers', vouchersRoute)
+adminRouter.route('/reconciliation', reconciliationRoute)
+
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
     data: {
       message:
         'admin router live. Mounted: /audit-log, /data-directory, /settlements, ' +
-        '/voucher-requests, /property-transfers, /rental-extensions.',
+        '/voucher-requests, /property-transfers, /rental-extensions, /deposits, ' +
+        '/treasury, /vouchers, /reconciliation.',
     },
   }),
 )
