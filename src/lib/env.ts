@@ -21,6 +21,13 @@ const envSchema = z.object({
   // Email
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM_EMAIL: z.string().default('City of Karis <noreply@cityofkaris.example>'),
+  RESEND_FROM_NAME: z.string().default('City of Karis'),
+
+  // File uploads (UploadThing — Phase 1+ legacy, optional during port)
+  UPLOADTHING_TOKEN: z.string().optional(),
+
+  // Public app URL (for email links etc.)
+  APP_URL: z.string().url().default('http://localhost:3000'),
 
   // Storage
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
