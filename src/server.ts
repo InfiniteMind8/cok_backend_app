@@ -6,6 +6,9 @@ import { errorMiddleware } from './middleware/error.js'
 import { requireAuth } from './middleware/auth.js'
 import { healthRoute } from './routes/system/health.js'
 import { meRoute } from './routes/system/me.js'
+import { attachmentsRoute } from './routes/system/attachments.js'
+import { authRoute } from './routes/system/auth.js'
+import { sentryTestRoute } from './routes/system/sentry-test.js'
 import { adminRouter } from './routes/admin/index.js'
 import { residentRouter } from './routes/resident/index.js'
 import { clerkWebhookRoute } from './webhooks/clerk.js'
@@ -35,11 +38,23 @@ app.route('/webhooks/clerk', clerkWebhookRoute)
 // Cron routes (gated by CRON_SECRET bearer in route-level middleware)
 app.route('/cron', cronRouter)
 
+// Attachments (mixed auth: /serve uses HMAC token, /upload uses requireAuth
+// at the route level — must NOT be under the global /v1 requireAuth gate
+// because /serve has no JWT).
+app.route('/v1/attachments', attachmentsRoute)
+
+// Demo-only Clerk sign-in token mint (404 in production; rate-limited per IP).
+app.route('/v1/auth', authRoute)
+
 // Authenticated routes
-app.use('/v1/*', requireAuth)
+app.use('/v1/me/*', requireAuth)
+app.use('/v1/admin/*', requireAuth)
+app.use('/v1/resident/*', requireAuth)
+app.use('/v1/system/*', requireAuth)
 app.route('/v1/me', meRoute)
 app.route('/v1/admin', adminRouter)
 app.route('/v1/resident', residentRouter)
+app.route('/v1/system/sentry-test', sentryTestRoute)
 
 // 404 fallback
 app.notFound((c: Context) => {

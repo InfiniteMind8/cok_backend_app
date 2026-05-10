@@ -35,19 +35,24 @@ import { requireRole } from '../../middleware/auth.js'
  * Each sub-route should export a Hono<AppEnv> instance and be mounted here
  * via .route(). Use @hono/zod-validator with schemas from the shared types.
  */
+import { auditLogRoute } from './audit-log.js'
+import { dataDirectoryRoute } from './data-directory.js'
+
 export const adminRouter = new Hono<AppEnv>()
 
 adminRouter.use('*', requireRole('MASTER_ADMIN'))
 
-// TODO(phase2-B.3): mount sub-routes as they're ported.
-// import { accountsRoute } from './accounts.js'; adminRouter.route('/accounts', accountsRoute)
+// Phase 2 Block B.4 — exporters/cron-adjacent admin routes ported from
+// website/app/api/admin/*. Action routes (accounts, treasury, approvals,
+// imports, etc.) ported from website/_actions/* land in Phase 3.
+adminRouter.route('/audit-log', auditLogRoute)
+adminRouter.route('/data-directory', dataDirectoryRoute)
 
 adminRouter.get('/', (c) =>
   c.json({
     ok: true,
     data: {
-      message:
-        'admin router is mounted but no sub-routes are wired yet — see TODO(phase2-B.3) in src/routes/admin/index.ts',
+      message: 'admin router live. Sub-routes mounted: /audit-log, /data-directory.',
     },
   }),
 )
