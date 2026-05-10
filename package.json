@@ -50,6 +50,7 @@
     "pg": "^8.20.0",
     "pino": "^10.0.0",
     "prisma": "^7.8.0",
+    "react": "^19.2.6",
     "resend": "^6.12.2",
     "server-only": "^0.0.1",
     "svix": "^1.92.2",
@@ -58,6 +59,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9",
     "jose": "^5.9.6",
