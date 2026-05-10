@@ -1,0 +1,81 @@
+{
+  "name": "cok-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "City of Karis backend API — Hono + Prisma + Clerk JWT verification. Standalone service that the cok-app frontend talks to.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file=.env dist/index.js",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rls": "vitest run tests/rls",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:status": "prisma migrate status",
+    "prisma:migrate:reset": "prisma migrate reset --skip-seed",
+    "prisma:studio": "prisma studio",
+    "db:seed": "node --env-file=.env --import tsx prisma/seed/seed.ts",
+    "db:seed:demo": "node --env-file=.env --import tsx prisma/seed/demo-transactions.ts",
+    "db:seed:history": "node --env-file=.env --import tsx prisma/seed/history-transactions.ts",
+    "db:seed:production": "node --env-file=.env --import tsx prisma/seed/seed-production.ts",
+    "db:rls:apply": "node --env-file=.env --import tsx prisma/rls/apply.ts",
+    "db:rls:verify": "node --env-file=.env --import tsx prisma/rls/verify.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1038.0",
+    "@aws-sdk/s3-request-presigner": "^3.1038.0",
+    "@clerk/backend": "^2.18.0",
+    "@hono/node-server": "^1.18.2",
+    "@hono/zod-validator": "^0.7.4",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.7",
+    "@react-pdf/renderer": "^4.5.1",
+    "@sentry/node": "^10.50.0",
+    "@types/pg": "^8.20.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "date-fns": "^4.1.0",
+    "decimal.js": "^10.6.0",
+    "hono": "^4.10.5",
+    "jszip": "^3.10.1",
+    "pg": "^8.20.0",
+    "pino": "^10.0.0",
+    "prisma": "^7.8.0",
+    "resend": "^6.12.2",
+    "server-only": "^0.0.1",
+    "svix": "^1.92.2",
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^9",
+    "jose": "^5.9.6",
+    "pino-pretty": "^11.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "@sentry/cli",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma"
+    ]
+  }
+}

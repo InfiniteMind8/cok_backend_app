@@ -1,0 +1,829 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  MASTER_ADMIN
+  ADMIN
+  VENDOR
+  RESIDENT
+  VISITOR
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_KYC
+}
+
+enum TransactionType {
+  DEPOSIT
+  PURCHASE
+  TRANSFER
+  BARTER
+  PAYROLL
+  RESIDENT_SETTLEMENT
+  VENDOR_SETTLEMENT
+  VISITOR_SETTLEMENT
+  TREASURY_ADJUSTMENT
+  FEE_SPLIT
+  REVERSAL
+  FIAT_CONVERSION
+  CONVERSION_BONUS
+}
+
+enum DisplayCurrency {
+  KCRD
+  USD
+  GYD
+}
+
+enum PromotionDirection {
+  FIAT_TO_KCRD
+  KCRD_TO_FIAT
+}
+
+enum PromotionEligibility {
+  ALL
+  FOUNDING_MEMBERS
+  RESIDENTS_ONLY
+  SPECIFIC_USERS
+}
+
+enum SettlementStatus {
+  PENDING_APPROVAL
+  APPROVED
+  DECLINED
+  SETTLED
+  CANCELLED
+}
+
+enum PropertyType {
+  OWNERSHIP
+  RENTAL
+  ADMIN
+}
+
+enum PropertyCategory {
+  COMMERCIAL
+  RESIDENTIAL
+  MIXED
+}
+
+enum PropertyStatus {
+  VACANT
+  OCCUPIED
+  UNDER_CONSTRUCTION
+}
+
+enum IssueLevel {
+  YELLOW
+  ORANGE
+  RED
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum EmailLogStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum AnnouncementTargetType {
+  COMMUNITY_WIDE
+  ROLE
+  VISITOR_GROUP
+  SPECIFIC_USERS
+}
+
+enum AnnouncementSeverity {
+  INFO
+  URGENT
+  CRITICAL
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// Prompt B.3: entity types for file attachments
+enum AttachmentEntityType {
+  PROPERTY
+  USER
+  ISSUE
+  LEASE
+  VOUCHER_REQUEST
+}
+
+// Prompt C.3: rental cycle enums
+enum CycleUnit {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ANNUAL
+}
+
+enum LeaseStatus {
+  ACTIVE
+  ENDING_SOON
+  EXPIRED
+  CANCELLED
+}
+
+// ─── Core Identity ────────────────────────────────────────────────────────────
+
+model User {
+  id              String        @id @default(cuid())
+  clerkId         String?       @unique
+  memberId        String        @unique
+  email           String        @unique
+  fullName        String
+  role            Role
+  status          AccountStatus @default(PENDING_KYC)
+  profilePhotoUrl String?
+  introduction    String?       @db.Text
+  kyc             Json?
+  // B.3: extended profile fields for all roles
+  preferredName         String?
+  phone                 String?
+  gender                String?
+  nationalIdType        String?
+  nationalIdNumber      String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  householdSize         Int?
+  vehiclePlates         String[]
+  notes                 String?  @db.Text
+  // C.1: multi-currency display preference
+  displayCurrency       DisplayCurrency  @default(KCRD)
+  foundingMember        Boolean          @default(false)
+  // D.7: onboarding tour
+  onboardingTourCompletedAt DateTime?
+  onboardingTourDismissedAt  DateTime?
+  // D.13: soft-delete for Clerk user.deleted events
+  deactivatedAt      DateTime?
+  deactivationReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  wallet           Wallet?
+  ownedProperties  PropertyOwnership[]
+  rentedProperties PropertyTenancy[]
+  notifications    Notification[]
+  issuesReported   Issue[]                  @relation("IssueReporter")
+  issuesAssigned   Issue[]                  @relation("IssueAssignee")
+  votes            VoteSubmission[]
+  visitorProfile   VisitorProfile?          @relation("VisitorUser")
+  hostedVisitors   VisitorProfile[]         @relation("VisitorHost")
+  vendorProfile    VendorProfile?
+  // C.2: visitor group relations
+  createdGroups    VisitorGroup[]           @relation("VisitorGroupCreator")
+  groupMemberships VisitorGroupMembership[] @relation("VisitorGroupMember")
+  groupsAssigned   VisitorGroupMembership[] @relation("VisitorGroupAssigner")
+  // C.3: rental extension relations
+  extensionRequests  RentalExtensionRequest[] @relation("ExtensionRequester")
+  extensionReviews   RentalExtensionRequest[] @relation("ExtensionReviewer")
+  // D.5: reconciliation acknowledgements
+  reconciliationAcknowledgements ReconciliationReport[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+// B.3: visitor-specific profile data
+model VisitorProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  visitPurpose      String?
+  expectedArrival   DateTime?
+  expectedDeparture DateTime?
+  hostId            String?
+
+  user User  @relation("VisitorUser", fields: [userId], references: [id])
+  host User? @relation("VisitorHost", fields: [hostId], references: [id])
+}
+
+// B.3: vendor-specific profile data
+model VendorProfile {
+  id                   String  @id @default(cuid())
+  userId               String  @unique
+  businessName         String?
+  businessCategory     String?
+  payoutMethod         String?
+  kcrdWalletPreference Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// ─── Wallet & Ledger ──────────────────────────────────────────────────────────
+
+model Wallet {
+  id        String        @id @default(cuid())
+  userId    String?       @unique
+  user      User?         @relation(fields: [userId], references: [id])
+  isSystem  Boolean       @default(false)
+  systemKey String?       @unique
+  floor_kcrd Decimal?     @db.Decimal(20, 8)
+  entries   LedgerEntry[]
+  createdAt DateTime      @default(now())
+
+  @@index([systemKey])
+}
+
+model FeeSchedule {
+  id          String        @id @default(cuid())
+  effectiveAt DateTime
+  effectiveTo DateTime?
+  rules       Json
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  transactions Transaction[]
+
+  @@index([effectiveAt])
+  @@index([effectiveTo])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String?
+  actorId   String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  type          TransactionType
+  description   String
+  reference     String?
+  feeScheduleId String?
+  feeSchedule   FeeSchedule?    @relation(fields: [feeScheduleId], references: [id])
+  initiatedBy   String?
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  entries       LedgerEntry[]
+
+  @@index([createdAt])
+  @@index([type])
+}
+
+model LedgerEntry {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  walletId      String
+  wallet        Wallet      @relation(fields: [walletId], references: [id])
+  amount        Decimal     @db.Decimal(20, 8)
+  description   String?
+  createdAt     DateTime    @default(now())
+
+  @@index([walletId])
+  @@index([transactionId])
+}
+
+// ─── Financial Operations ─────────────────────────────────────────────────────
+
+model Deposit {
+  id            String   @id @default(cuid())
+  userId        String
+  fiatAmount    Decimal  @db.Decimal(20, 2)
+  currency      String   @default("USD")
+  paymentMethod String
+  proofUrl      String?
+  recordedBy    String
+  transactionId String   @unique
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SettlementRequest {
+  id             String           @id @default(cuid())
+  userId         String
+  amount         Decimal          @db.Decimal(20, 8)
+  status         SettlementStatus @default(PENDING_APPROVAL)
+  purpose        String?
+  approvedBy     String?
+  approvedAt     DateTime?
+  declinedReason String?
+  settledBy      String?
+  settledAt      DateTime?
+  proofUrl       String?
+  transactionId  String?
+  createdAt      DateTime         @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TreasuryAdjustment {
+  id         String   @id @default(cuid())
+  amount     Decimal  @db.Decimal(20, 2)
+  currency   String   @default("USD")
+  reason     String
+  recordedBy String
+  createdAt  DateTime @default(now())
+}
+
+// ─── Property ─────────────────────────────────────────────────────────────────
+
+model Property {
+  id                   String           @id @default(cuid())
+  code                 String           @unique
+  type                 PropertyType
+  category             PropertyCategory
+  address              String?
+  totalPrice           Decimal?         @db.Decimal(20, 2)
+  specifications       Json?
+  photos               String[]
+  documents            Json?
+  // B.3: extended property spec fields
+  lotNumber            String?
+  sizeSqm              Decimal?         @db.Decimal(10, 2)
+  bedrooms             Int?
+  bathrooms            Int?
+  parkingSpots         Int?
+  yearBuilt            Int?
+  propertyStatus       PropertyStatus   @default(VACANT)
+  currentValuationKcrd Decimal?         @db.Decimal(20, 2)
+  notes                String?          @db.Text
+  createdAt            DateTime         @default(now())
+
+  ownerships       PropertyOwnership[]
+  tenancies        PropertyTenancy[]
+  installments     PropertyInstallment[]
+  transferRequests PropertyTransferRequest[]
+  issues           Issue[]
+}
+
+model PropertyOwnership {
+  id           String    @id @default(cuid())
+  propertyId   String
+  userId       String
+  ownershipPct Decimal   @default(100)
+  contractDate DateTime
+  contractUrl  String?
+
+  property Property         @relation(fields: [propertyId], references: [id])
+  user     User             @relation(fields: [userId], references: [id])
+  payments PropertyPayment[]
+}
+
+model PropertyInstallment {
+  id           String   @id @default(cuid())
+  propertyId   String
+  number       Int
+  dueDate      DateTime
+  amount       Decimal  @db.Decimal(20, 2)
+  progressNote String?
+
+  property Property         @relation(fields: [propertyId], references: [id])
+  payments PropertyPayment[]
+}
+
+model PropertyPayment {
+  id            String   @id @default(cuid())
+  installmentId String
+  ownershipId   String
+  amount        Decimal  @db.Decimal(20, 2)
+  paidAt        DateTime
+  proofUrl      String?
+
+  installment PropertyInstallment @relation(fields: [installmentId], references: [id])
+  ownership   PropertyOwnership   @relation(fields: [ownershipId], references: [id])
+}
+
+model PropertyTenancy {
+  id            String   @id @default(cuid())
+  propertyId    String
+  userId        String
+  cycle         String
+  cyclePayment  Decimal  @db.Decimal(20, 2)
+  contractDate  DateTime
+  contractUrl   String?
+  // B.3: extended lease fields
+  startDate     DateTime?
+  endDate       DateTime?
+  depositAmount Decimal?  @db.Decimal(20, 2)
+  // C.3: rental cycle tracking
+  cycleUnit      CycleUnit  @default(MONTHLY)
+  leaseStatus    LeaseStatus @default(ACTIVE)
+  nextPaymentDue DateTime?
+
+  property                 Property                 @relation(fields: [propertyId], references: [id])
+  user                     User                     @relation(fields: [userId], references: [id])
+  cyclePayments            TenancyCyclePayment[]
+  rentalExtensionRequests  RentalExtensionRequest[]
+}
+
+model TenancyCyclePayment {
+  id          String   @id @default(cuid())
+  tenancyId   String
+  cycleNumber Int
+  amount      Decimal  @db.Decimal(20, 2)
+  paidAt      DateTime
+  proofUrl    String?
+
+  tenancy PropertyTenancy @relation(fields: [tenancyId], references: [id])
+}
+
+// ─── Community ────────────────────────────────────────────────────────────────
+
+model CommunityUpdate {
+  id            String                 @id @default(cuid())
+  category      String
+  headline      String
+  message       String                 @db.Text
+  photoUrl      String?
+  publishedBy   String
+  publishedAt   DateTime               @default(now())
+  // C.2: announcement targeting
+  targetType    AnnouncementTargetType @default(COMMUNITY_WIDE)
+  targetRole    Role?
+  targetGroupId String?
+  targetGroup   VisitorGroup?          @relation(fields: [targetGroupId], references: [id])
+  targetUserIds String[]               @default([])
+  // D.6: emergency broadcast fields
+  severity      AnnouncementSeverity   @default(INFO)
+  isEmergency   Boolean                @default(false)
+
+  acknowledgements UpdateAcknowledgement[]
+
+  @@index([targetType])
+  @@index([targetGroupId])
+  @@index([isEmergency])
+}
+
+model UpdateAcknowledgement {
+  id             String   @id @default(cuid())
+  updateId       String
+  userId         String
+  acknowledgedAt DateTime @default(now())
+
+  update CommunityUpdate @relation(fields: [updateId], references: [id])
+
+  @@unique([updateId, userId])
+}
+
+model Vote {
+  id          String    @id @default(cuid())
+  headline    String
+  description String    @db.Text
+  isOpen      Boolean   @default(true)
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  closedAt    DateTime?
+
+  options     VoteOption[]
+  submissions VoteSubmission[]
+}
+
+model VoteOption {
+  id          String @id @default(cuid())
+  voteId      String
+  label       String
+  description String @db.Text
+
+  vote        Vote             @relation(fields: [voteId], references: [id])
+  submissions VoteSubmission[]
+}
+
+model VoteSubmission {
+  id          String   @id @default(cuid())
+  voteId      String
+  optionId    String
+  userId      String
+  submittedAt DateTime @default(now())
+
+  vote   Vote       @relation(fields: [voteId], references: [id])
+  option VoteOption @relation(fields: [optionId], references: [id])
+  user   User       @relation(fields: [userId], references: [id])
+
+  @@unique([voteId, userId])
+}
+
+model Issue {
+  id                String      @id @default(cuid())
+  reporterId        String
+  assigneeId        String?
+  seriousness       IssueLevel
+  urgency           IssueLevel
+  category          String
+  message           String      @db.Text
+  status            IssueStatus @default(OPEN)
+  // B.3: extended issue report fields
+  title             String?
+  location          String?
+  propertyId        String?
+  contactPreference String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  reporter User       @relation("IssueReporter", fields: [reporterId], references: [id])
+  assignee User?      @relation("IssueAssignee", fields: [assigneeId], references: [id])
+  property Property?  @relation(fields: [propertyId], references: [id])
+  replies  IssueReply[]
+}
+
+model IssueReply {
+  id        String   @id @default(cuid())
+  issueId   String
+  authorId  String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id])
+}
+
+// ─── Visitor Groups (Prompt C.2) ──────────────────────────────────────────────
+
+model VisitorGroup {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  theme       String?
+  description String   @db.Text
+  createdById String
+  createdBy   User     @relation("VisitorGroupCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  archived    Boolean  @default(false)
+
+  memberships   VisitorGroupMembership[]
+  announcements CommunityUpdate[]
+
+  @@index([archived])
+}
+
+model VisitorGroupMembership {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation("VisitorGroupMember", fields: [userId], references: [id])
+  groupId      String
+  group        VisitorGroup @relation(fields: [groupId], references: [id])
+  assignedById String
+  assignedBy   User         @relation("VisitorGroupAssigner", fields: [assignedById], references: [id])
+  assignedAt   DateTime     @default(now())
+  removedAt    DateTime?
+
+  @@index([userId, removedAt])
+  @@index([groupId, removedAt])
+}
+
+// ─── Email Delivery ───────────────────────────────────────────────────────────
+
+model EmailLog {
+  id                String         @id @default(cuid())
+  recipient         String
+  subject           String
+  template          String
+  html              String         @db.Text
+  idempotencyKey    String         @unique
+  status            EmailLogStatus @default(QUEUED)
+  providerMessageId String?
+  providerError     String?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+
+  @@index([recipient])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  link      String?
+  priority  String    @default("yellow")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+}
+
+// ─── Approvals ────────────────────────────────────────────────────────────────
+
+model PropertyTransferRequest {
+  id             String        @id @default(cuid())
+  propertyId     String
+  property       Property      @relation(fields: [propertyId], references: [id])
+  fromUserId     String
+  toUserId       String
+  requestedBy    String
+  notes          String?       @db.Text
+  status         RequestStatus @default(PENDING)
+  declinedReason String?       @db.Text
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([status])
+  @@index([propertyId])
+}
+
+model VoucherRequest {
+  id             String        @id @default(cuid())
+  recipientId    String
+  requestedBy    String
+  amountKcrd     Decimal       @db.Decimal(20, 8)
+  description    String?       @db.Text
+  message        String?       @db.Text
+  expiresAt      DateTime?
+  status         RequestStatus @default(PENDING)
+  declinedReason String?       @db.Text
+  voucherCode    String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([status])
+  @@index([recipientId])
+}
+
+// ─── Rental Extension (Prompt C.3) ───────────────────────────────────────────
+
+model RentalExtensionRequest {
+  id                  String        @id @default(cuid())
+  tenancyId           String
+  requestedById       String
+  requestedNewEndDate DateTime
+  reason              String?       @db.Text
+  status              RequestStatus @default(PENDING)
+  reviewedById        String?
+  reviewedAt          DateTime?
+  decisionNote        String?       @db.Text
+  createdAt           DateTime      @default(now())
+
+  tenancy     PropertyTenancy @relation(fields: [tenancyId], references: [id])
+  requestedBy User            @relation("ExtensionRequester", fields: [requestedById], references: [id])
+  reviewedBy  User?           @relation("ExtensionReviewer", fields: [reviewedById], references: [id])
+
+  @@index([tenancyId])
+  @@index([status])
+  @@index([requestedById])
+}
+
+// ─── Currency (Prompt C.1) ───────────────────────────────────────────────────
+
+model ConversionRate {
+  id            String          @id @default(cuid())
+  baseCurrency  DisplayCurrency
+  quoteCurrency DisplayCurrency
+  rate          Decimal         @db.Decimal(18, 8)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  setBy         String
+  createdAt     DateTime        @default(now())
+
+  @@unique([baseCurrency, quoteCurrency, effectiveFrom])
+  @@index([baseCurrency, quoteCurrency, effectiveTo])
+}
+
+model ConversionPromotion {
+  id              String               @id @default(cuid())
+  name            String
+  description     String               @db.Text
+  bonusPercent    Decimal              @db.Decimal(5, 2)
+  direction       PromotionDirection
+  eligibility     PromotionEligibility
+  eligibleUserIds String[]
+  startsAt        DateTime
+  endsAt          DateTime
+  active          Boolean              @default(true)
+  createdBy       String
+  createdAt       DateTime             @default(now())
+
+  @@index([active, startsAt, endsAt])
+}
+
+// ─── File Attachments (Prompt B.3) ───────────────────────────────────────────
+
+model Attachment {
+  id         String               @id @default(cuid())
+  storageKey String
+  mimeType   String
+  sizeBytes  BigInt
+  sha256     String               @default("")
+  name       String
+  category   String               @default("")
+  entityType AttachmentEntityType
+  entityId   String
+  fieldName  String
+  uploadedBy String
+  encrypted  Boolean              @default(false)
+  iv         Bytes?
+  createdAt  DateTime             @default(now())
+
+  @@index([entityType, entityId])
+  @@index([uploadedBy])
+}
+
+// ─── Reconciliation (Prompt D.5) ─────────────────────────────────────────────
+
+enum ReconciliationStatus {
+  OK
+  WARNING
+  MISMATCH
+}
+
+// D.13: Clerk webhook event log (idempotency)
+model WebhookEvent {
+  id             String    @id           // svix-id header value
+  source         String                  // 'clerk'
+  type           String
+  payload        Json
+  signatureValid Boolean
+  processedAt    DateTime?
+  errorMessage   String?
+  receivedAt     DateTime  @default(now())
+}
+
+model ReconciliationReport {
+  id               String               @id @default(cuid())
+  runAt            DateTime             @default(now())
+  status           ReconciliationStatus
+  details          Json
+  acknowledgedById String?
+  acknowledgedBy   User?                @relation(fields: [acknowledgedById], references: [id])
+  acknowledgedAt   DateTime?
+
+  @@index([status, acknowledgedAt])
+  @@index([runAt])
+}
+
+// ─── Bulk Import (Prompt D.1) ─────────────────────────────────────────────────
+
+enum ImportStatus {
+  UPLOADED
+  COMMITTED
+  CANCELLED
+}
+
+enum ImportRowStatus {
+  VALID
+  WARNING
+  ERROR
+}
+
+model ImportSession {
+  id             String        @id @default(cuid())
+  type           String
+  fileName       String
+  fileHash       String
+  totalRows      Int
+  validCount     Int
+  warningCount   Int
+  errorCount     Int
+  committedCount Int           @default(0)
+  skippedCount   Int           @default(0)
+  status         ImportStatus  @default(UPLOADED)
+  actorId        String
+  metadata       Json?
+  rows           ImportRecord[]
+  createdAt      DateTime      @default(now())
+  completedAt    DateTime?
+
+  @@index([actorId])
+  @@index([status, createdAt])
+}
+
+model ImportRecord {
+  id              String          @id @default(cuid())
+  sessionId       String
+  session         ImportSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  rowNumber       Int
+  rowData         Json
+  status          ImportRowStatus
+  messages        Json            @default("[]")
+  confirmedByAdmin Boolean        @default(false)
+  createdEntityId String?
+
+  @@index([sessionId, status])
+}
