@@ -1,28 +1,26 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../../server.js'
+import { residentCommunityRoute } from './community.js'
+import { residentWalletRoute } from './wallet.js'
+import { residentPropertyRoute } from './property.js'
 
 /**
- * Resident router. Mounts /v1/resident/* sub-routes. No role gate at the
- * router level — individual routes apply `denyIfVisitor` where needed.
+ * Resident router. Mounts /v1/resident/* sub-routes. No router-level role
+ * gate — individual sub-routes apply `requireRole(...)` per endpoint.
  *
- * SUB-ROUTES TO IMPLEMENT (Phase 2 Block B.3 — port from website/app/(resident)/_actions/):
- *   - wallet              POST /wallet/transfer    POST /wallet/redeem-voucher    POST /wallet/settle
- *                         POST /wallet/exchange   GET  /wallet/transactions
- *   - profile             POST /profile/update     POST /profile/photo            POST /profile/display-currency
- *   - community           POST /community/announcements/:id/acknowledge  POST /community/votes
- *                         POST /community/issues/create
- *   - property            POST /property/extension-request   GET  /property/tenancy
+ * Profile and notification routes (display-currency, introduction, photo,
+ * mark-all-read, tour) live under /v1/me, not here, because they're
+ * scoped to the caller and don't depend on RESIDENT role.
  */
 export const residentRouter = new Hono<AppEnv>()
 
-// TODO(phase2-B.3): mount sub-routes as they're ported.
+residentRouter.route('/community', residentCommunityRoute)
+residentRouter.route('/wallet', residentWalletRoute)
+residentRouter.route('/property', residentPropertyRoute)
 
 residentRouter.get('/', (c) =>
   c.json({
     ok: true,
-    data: {
-      message:
-        'resident router is mounted but no sub-routes are wired yet — see TODO(phase2-B.3) in src/routes/resident/index.ts',
-    },
+    data: { message: 'resident router live. Mounted: /community, /wallet, /property.' },
   }),
 )
