@@ -26,6 +26,31 @@ residentCommunityRoute.post('/updates/:id/acknowledge', async (c) => {
   return c.json({ ok: true, data: { acknowledged: true } })
 })
 
+// ─── POST /community/broadcasts/:id/acknowledge ──────────────────────────────
+// Acknowledge an emergency broadcast. Open to any authenticated user (the
+// banner is shown community-wide). Fails NOT_FOUND if the target isn't an
+// emergency broadcast — preserves the website action's invariant.
+residentCommunityRoute.post('/broadcasts/:id/acknowledge', async (c) => {
+  const user = c.get('user')!
+  const broadcastId = c.req.param('id')
+
+  const broadcast = await db.communityUpdate.findUnique({
+    where: { id: broadcastId },
+    select: { id: true, isEmergency: true },
+  })
+  if (!broadcast || !broadcast.isEmergency) {
+    throw ApiError.notFound('Broadcast not found')
+  }
+
+  await db.updateAcknowledgement.upsert({
+    where: { updateId_userId: { updateId: broadcastId, userId: user.id } },
+    update: {},
+    create: { updateId: broadcastId, userId: user.id },
+  })
+
+  return c.json({ ok: true, data: { acknowledged: true } })
+})
+
 // ─── POST /community/votes/:voteId/cast ──────────────────────────────────────
 // Cast a vote. RESIDENT-only.
 const castVoteSchema = z.object({
