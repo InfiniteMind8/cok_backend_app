@@ -7,6 +7,25 @@ import { runAndSaveReconciliation } from '../../lib/ledger/reconciliation-report
 
 export const reconciliationRoute = new Hono<AppEnv>()
 
+// ─── GET /active-alert — most-recent unacknowledged MISMATCH report ──────────
+// Used by the admin layout banner to surface treasury discrepancies. Returns
+// null when there's nothing to alert on.
+reconciliationRoute.get('/active-alert', async (c) => {
+  const alert = await db.reconciliationReport.findFirst({
+    where: { status: 'MISMATCH', acknowledgedAt: null },
+    orderBy: { runAt: 'desc' },
+  })
+  if (!alert) return c.json({ ok: true, data: null })
+  return c.json({
+    ok: true,
+    data: {
+      id: alert.id,
+      runAt: alert.runAt.toISOString(),
+      details: alert.details,
+    },
+  })
+})
+
 // ─── GET /reports — paginated reconciliation report list ─────────────────────
 reconciliationRoute.get('/reports', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)

@@ -10,8 +10,34 @@ import {
   getSystemWalletSummary,
   getTreasuryReserveBalance,
 } from '../../lib/queries/dashboard.js'
+import { getAllWalletRows } from '../../lib/ledger/balance.js'
+import { reconcileTreasury } from '../../lib/ledger/reconciliation.js'
 
 export const treasuryRoute = new Hono<AppEnv>()
+
+// ─── GET /debug — diagnostic wallet rows + reconciliation snapshot ───────────
+treasuryRoute.get('/debug', async (c) => {
+  const [wallets, recon] = await Promise.all([getAllWalletRows(), reconcileTreasury()])
+  return c.json({
+    ok: true,
+    data: {
+      wallets: wallets.map((w) => ({
+        walletId: w.walletId,
+        userId: w.userId,
+        systemKey: w.systemKey,
+        isSystem: w.isSystem,
+        balance: w.balance.toString(),
+        displayName: w.displayName,
+      })),
+      reconciliation: {
+        isBalanced: recon.isBalanced,
+        totalIssued: recon.totalIssued.toString(),
+        sumAllEntries: recon.sumAllEntries.toString(),
+        discrepancy: recon.discrepancy.toString(),
+      },
+    },
+  })
+})
 
 // ─── GET / — treasury overview ───────────────────────────────────────────────
 // Page bundle for /admin/treasury: reserve balance, system wallet floors,

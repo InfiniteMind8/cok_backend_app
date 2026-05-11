@@ -54,6 +54,47 @@ residentPropertyRoute.get('/current', async (c) => {
   })
 })
 
+// ─── GET /installments/:id/payment — caller-owned installment payment ───────
+// Used by the website's installment-receipt route to render a PDF without
+// reaching into the frontend DB. Only matches when the installment belongs
+// to a property the caller has paid against.
+residentPropertyRoute.get('/installments/:id/payment', async (c) => {
+  const user = c.get('user')!
+  const installmentId = c.req.param('id')
+
+  const payment = await db.propertyPayment.findFirst({
+    where: {
+      installmentId,
+      ownership: { userId: user.id },
+    },
+    include: {
+      installment: { include: { property: true } },
+      ownership: { include: { user: true } },
+    },
+  })
+
+  if (!payment) throw ApiError.notFound('Installment payment not found')
+
+  return c.json({
+    ok: true,
+    data: {
+      amount: payment.amount.toString(),
+      paidAt: payment.paidAt.toISOString(),
+      installment: {
+        number: payment.installment.number,
+        dueDate: payment.installment.dueDate.toISOString(),
+      },
+      property: {
+        code: payment.installment.property.code,
+      },
+      member: {
+        fullName: payment.ownership.user.fullName,
+        memberId: payment.ownership.user.memberId,
+      },
+    },
+  })
+})
+
 // ─── POST /property/extension-request ────────────────────────────────────────
 // Resident requests an extension on their tenancy. Admin approval/decline
 // for these requests will be ported to routes/admin/rental-extensions.ts in

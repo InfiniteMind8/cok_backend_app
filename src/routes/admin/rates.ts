@@ -103,3 +103,19 @@ ratesRoute.get('/active', async (c) => {
 
   return c.json({ ok: true, data: rows })
 })
+
+// ─── GET /all — every rate ever recorded (powers settings/currency table) ────
+ratesRoute.get('/all', async (c) => {
+  const rows = await db.conversionRate.findMany({
+    orderBy: [{ baseCurrency: 'asc' }, { effectiveFrom: 'desc' }],
+  })
+  return c.json({
+    ok: true,
+    data: rows.map((r) => ({
+      ...r,
+      rate: r.rate.toString(),
+      effectiveFrom: r.effectiveFrom.toISOString(),
+      effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString() : null,
+    })),
+  })
+})

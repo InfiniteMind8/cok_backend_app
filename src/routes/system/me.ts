@@ -5,6 +5,7 @@ import type { AppEnv } from '../../server.js'
 import { ApiError } from '../../lib/api-error.js'
 import { db } from '../../lib/db.js'
 import { requireRole } from '../../middleware/auth.js'
+import { clerkClient } from '../../lib/clerk.js'
 import { getStorage } from '../../lib/storage/driver.js'
 import { getActiveEmergencyBroadcasts } from '../../lib/queries/broadcast.js'
 import { getTourStatus } from '../../lib/queries/tour.js'
@@ -34,6 +35,86 @@ meRoute.get('/visitor-groups', async (c) => {
   const user = c.get('user')!
   const groups = await getUserActiveGroups(user.id)
   return c.json({ ok: true, data: groups })
+})
+
+// ─── GET /rates/active — every conversion rate currently in effect ───────────
+// Available to any authenticated caller; the resident wallet page uses it
+// to render display-currency conversions. Mirrors /v1/admin/rates/active.
+meRoute.get('/rates/active', async (c) => {
+  const now = new Date()
+  const rows = await db.conversionRate.findMany({
+    where: {
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+    },
+    select: { baseCurrency: true, quoteCurrency: true, rate: true },
+  })
+  const map: Record<string, string> = {}
+  for (const row of rows) {
+    map[`${row.baseCurrency}_${row.quoteCurrency}`] = row.rate.toString()
+  }
+  map['KCRD_KCRD'] = '1'
+  map['USD_USD'] = '1'
+  map['GYD_GYD'] = '1'
+  return c.json({ ok: true, data: map })
+})
+
+// ─── GET /profile — extended profile bundle for the resident profile page ───
+// Adds kyc/status/introduction/twoFactorEnabled + a resolved signed URL for
+// the profile photo when stored as a storage key. The website's profile page
+// renders straight from this payload.
+meRoute.get('/profile', async (c) => {
+  const user = c.get('user')!
+  const fullUser = await db.user.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      clerkId: true,
+      email: true,
+      fullName: true,
+      memberId: true,
+      role: true,
+      status: true,
+      profilePhotoUrl: true,
+      introduction: true,
+      kyc: true,
+      createdAt: true,
+      displayCurrency: true,
+      foundingMember: true,
+    },
+  })
+  if (!fullUser) throw ApiError.notFound('User record missing')
+
+  let profilePhotoSignedUrl: string | null = null
+  if (fullUser.profilePhotoUrl) {
+    if (fullUser.profilePhotoUrl.startsWith('http')) {
+      profilePhotoSignedUrl = fullUser.profilePhotoUrl
+    } else {
+      profilePhotoSignedUrl = await getStorage()
+        .getSignedUrl(fullUser.profilePhotoUrl, 300)
+        .catch(() => null)
+    }
+  }
+
+  let twoFactorEnabled = false
+  if (fullUser.clerkId) {
+    try {
+      const clerkUser = await clerkClient.users.getUser(fullUser.clerkId)
+      twoFactorEnabled = clerkUser.twoFactorEnabled
+    } catch {
+      // non-fatal — keep default false
+    }
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      ...fullUser,
+      createdAt: fullUser.createdAt.toISOString(),
+      profilePhotoSignedUrl,
+      twoFactorEnabled,
+    },
+  })
 })
 
 // ─── GET / — current user profile ────────────────────────────────────────────

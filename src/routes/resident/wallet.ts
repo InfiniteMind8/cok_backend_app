@@ -135,3 +135,49 @@ residentWalletRoute.get(
     return c.json({ ok: true, data: page })
   },
 )
+
+// ─── GET /wallet/transactions/:id — single transaction (caller-scoped) ───────
+// Used by the website's receipt route to render a PDF without touching the
+// frontend DB. Filters via `entries.wallet.userId` so the caller can only
+// fetch transactions touching one of their wallets.
+residentWalletRoute.get('/transactions/:id', async (c) => {
+  const user = c.get('user')!
+  const id = c.req.param('id')
+
+  const transaction = await db.transaction.findUnique({
+    where: { id },
+    include: {
+      entries: {
+        where: { wallet: { userId: user.id } },
+        take: 1,
+      },
+    },
+  })
+
+  const entry = transaction?.entries[0]
+  if (!transaction || !entry) {
+    throw ApiError.notFound('Transaction not found')
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      id: transaction.id,
+      type: transaction.type,
+      description: transaction.description,
+      reference: transaction.reference,
+      createdAt: transaction.createdAt.toISOString(),
+      entryAmount: entry.amount.toString(),
+    },
+  })
+})
+
+// ─── GET /wallet/me — basic wallet identity (id + userId) for caller ─────────
+// Used by website pages that need the caller's walletId before issuing
+// other wallet queries (e.g. /transactions?walletId=...).
+residentWalletRoute.get('/me', async (c) => {
+  const user = c.get('user')!
+  const wallet = await db.wallet.findUnique({ where: { userId: user.id } })
+  if (!wallet) return c.json({ ok: true, data: null })
+  return c.json({ ok: true, data: { id: wallet.id, userId: wallet.userId } })
+})
