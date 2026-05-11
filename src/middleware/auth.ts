@@ -33,10 +33,11 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
 
   const user = await prisma.user.findUnique({
     where: { clerkId },
-    select: { id: true, role: true, email: true, deactivatedAt: true },
+    select: { id: true, role: true, email: true, status: true, deactivatedAt: true },
   })
   if (!user) throw ApiError.unauthorized('User not found in database')
   if (user.deactivatedAt) throw ApiError.forbidden('Account deactivated')
+  if (user.status !== 'ACTIVE') throw ApiError.forbidden('Account not active')
 
   c.set('user', { id: user.id, role: user.role, email: user.email ?? undefined })
   await next()
