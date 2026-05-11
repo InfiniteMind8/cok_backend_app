@@ -8,6 +8,7 @@ import { requireRole } from '../../middleware/auth.js'
 import { getStorage } from '../../lib/storage/driver.js'
 import { getActiveEmergencyBroadcasts } from '../../lib/queries/broadcast.js'
 import { getTourStatus } from '../../lib/queries/tour.js'
+import { getUserActiveGroups } from '../../lib/queries/visitor-groups.js'
 
 export const meRoute = new Hono<AppEnv>()
 
@@ -24,6 +25,15 @@ meRoute.get('/broadcasts/active', async (c) => {
   const user = c.get('user')!
   const broadcasts = await getActiveEmergencyBroadcasts(user.id)
   return c.json({ ok: true, data: broadcasts })
+})
+
+// ─── GET /visitor-groups — caller's active visitor-group memberships ─────────
+// Used by the resident community page when the caller is a VISITOR. Returns
+// the group rows (not memberships), already filtered to non-archived.
+meRoute.get('/visitor-groups', async (c) => {
+  const user = c.get('user')!
+  const groups = await getUserActiveGroups(user.id)
+  return c.json({ ok: true, data: groups })
 })
 
 // ─── GET / — current user profile ────────────────────────────────────────────
