@@ -144,6 +144,7 @@ clerkWebhookRoute.post('/', async (c) => {
               role: 'VISITOR',
               status: 'PENDING_KYC',
               profilePhotoUrl: data.image_url,
+              vehiclePlates: [],
             },
           })
 

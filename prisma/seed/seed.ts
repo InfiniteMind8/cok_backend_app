@@ -117,6 +117,7 @@ async function main() {
         fullName: u.fullName,
         role: u.role,
         status: u.status,
+        vehiclePlates: [],
       },
     })
     createdUsers[u.email] = user.id

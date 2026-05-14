@@ -166,7 +166,7 @@ model User {
   emergencyContactName  String?
   emergencyContactPhone String?
   householdSize         Int?
-  vehiclePlates         String[]
+  vehiclePlates         String[]  @default([])
   notes                 String?  @db.Text
   // C.1: multi-currency display preference
   displayCurrency       DisplayCurrency  @default(KCRD)

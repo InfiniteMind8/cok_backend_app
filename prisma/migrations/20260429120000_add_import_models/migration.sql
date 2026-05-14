@@ -18,6 +18,7 @@ CREATE TABLE "ImportSession" (
     "skippedCount" INTEGER NOT NULL DEFAULT 0,
     "status" "ImportStatus" NOT NULL DEFAULT 'UPLOADED',
     "actorId" TEXT NOT NULL,
+    "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "completedAt" TIMESTAMP(3),
 
