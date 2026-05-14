@@ -1,6 +1,7 @@
 import { defineConfig } from 'prisma/config'
+import { existsSync } from 'fs'
 
-process.loadEnvFile('.env')
+if (existsSync('.env')) process.loadEnvFile('.env')
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
