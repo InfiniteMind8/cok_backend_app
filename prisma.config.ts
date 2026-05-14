@@ -1,6 +1,11 @@
 import { defineConfig } from 'prisma/config'
+import { existsSync } from 'node:fs'
 
-process.loadEnvFile('.env')
+// Load .env only when present (local dev). On Railway, env vars are injected
+// directly into process.env by the platform.
+if (existsSync('.env')) {
+  process.loadEnvFile('.env')
+}
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
